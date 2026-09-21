@@ -1,0 +1,174 @@
+{
+  "app_name": "GaraMaster",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A disciplined, highly readable, and structured interface that respects the martial arts theme through clean typography and crisp blue-and-white contrast.",
+  "color": {
+    "surface": "#FFFFFF",
+    "onSurface": "#111827",
+    "surfaceSecondary": "#F7F9FC",
+    "onSurfaceSecondary": "#1F2937",
+    "surfaceTertiary": "#EBF0F5",
+    "onSurfaceTertiary": "#374151",
+    "surfaceInverse": "#0B162C",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#003B73",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#004C97",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#1A65BA",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#E6F0FA",
+    "onBrandTertiary": "#003B73",
+    "success": "#059669",
+    "onSuccess": "#FFFFFF",
+    "warning": "#D97706",
+    "onWarning": "#FFFFFF",
+    "error": "#DC2626",
+    "onError": "#FFFFFF",
+    "info": "#2563EB",
+    "onInfo": "#FFFFFF",
+    "border": "#E2E8F0",
+    "borderStrong": "#CBD5E1",
+    "divider": "#F1F5F9",
+    "muted": "#64748B"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous iOS padding. Avoid dense layouts; give elements breathing room.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use expo-blur on bottom tab bar when content scrolls behind it.",
+      "Use frosted glass over brand-tinted or photo backdrops for the featured cards."
+    ],
+    "dont's": [
+      "Never blur body text regions or form inputs.",
+      "Do not apply glass to list rows in dense lists."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Auth / Login",
+      "purpose": "Classic username/password entry with martial arts textured background.",
+      "states": {
+        "loading": "Centered spinner on surface.",
+        "empty": "N/A",
+        "error": "Standard inline red error text under input, shaking animation on failure."
+      },
+      "layout": "Full-bleed background image with vertical gradient scrim (top-to-bottom transparent to surface). Floating surface card at the bottom 40% containing form fields and login CTA. Clean, single-column."
+    },
+    {
+      "name": "Master Dashboard",
+      "purpose": "Admin hub to manage officials, create competitions, and view overall availability status.",
+      "states": {
+        "loading": "Skeleton rows for recent competitions and pending approvals.",
+        "empty": "Empty state illustration of a tied belt, 'No active competitions. Add one to get started.'",
+        "error": "Toast notification with retry button."
+      },
+      "layout": "Sticky header with glassmorphism. Top horizontal scroll of quick action chips ('Create Official', 'New Comp'). Below: 2-column grid for key metrics (Total Officials, Pending Confirmations). Bottom: vertically scrolling list of 'Upcoming Competitions'."
+    },
+    {
+      "name": "Official Home",
+      "purpose": "Standard user view showing pending availability requests and confirmed upcoming competitions.",
+      "states": {
+        "loading": "Skeleton cards.",
+        "empty": "'No upcoming competitions. We will notify you when requested.' with abstract kimono background.",
+        "error": "Centered retry button."
+      },
+      "layout": "Hero card at the top displaying the most immediate action (e.g., 'Availability Requested for Regional Championship') with Accept/Decline split buttons. Below: List of 'Confirmed Competitions' showing start date, end date, and address."
+    },
+    {
+      "name": "Notifications Center",
+      "purpose": "Chronological list of all alerts (requests, confirmations, reminders) accessible via bell icon.",
+      "states": {
+        "loading": "List skeletons.",
+        "empty": "Empty bell icon. 'You are all caught up.'",
+        "error": "Error message with manual refresh CTA."
+      },
+      "layout": "Simple vertical list. Unread items have a brandTertiary background. Read items have surface background. Swipe left to dismiss/delete."
+    },
+    {
+      "name": "Attendance Register",
+      "purpose": "For Master to record physical presence of confirmed officials at the venue.",
+      "states": {
+        "loading": "Spinner overlaid.",
+        "empty": "No officials confirmed yet.",
+        "error": "Failed to update attendance toast."
+      },
+      "layout": "List of confirmed users with toggle switches (Present/Absent). Sticky primary CTA 'Save Attendance' at the bottom over scrolling content."
+    }
+  ],
+  "images": {
+    "auth_background": {
+      "url": "https://images.unsplash.com/photo-1603210185246-b1662978ea37?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA4Mzl8MHwxfHNlYXJjaHwxfHxtYXJ0aWFsJTIwYXJ0cyUyMGJlbHR8ZW58MHx8fHwxNzg5OTk2ODEzfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Close up of martial arts belt on kimono"
+    },
+    "hero_master": {
+      "url": "https://images.unsplash.com/photo-1539465386388-838f814495bd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwxfHxrYXJhdGUlMjBzaWxob3VldHRlfGVufDB8fHx8MTc4OTk5NjgxM3ww&ixlib=rb-4.1.0&q=85",
+      "alt": "Silhouette of a martial arts punch against sky"
+    },
+    "empty_state_kimono": {
+      "url": "https://images.unsplash.com/photo-1678804481549-91d137d0e70b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwxfHxqdWRvJTIwa2ltb25vJTIwdGV4dHVyZXxlbnwwfHx8fDE3ODk5OTY4MTN8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Abstract judo kimono texture"
+    },
+    "hero_official": {
+      "url": "https://images.unsplash.com/photo-1602827115146-853fa12ba155?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA4Mzl8MHwxfHNlYXJjaHwzfHxtYXJ0aWFsJTIwYXJ0cyUyMGJlbHR8ZW58MHx8fHwxNzg5OTk2ODEzfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Martial arts belt resting on lap"
+    }
+  },
+  "haptics": {
+    "login_submit": "impactMedium",
+    "accept_availability": "notificationSuccess",
+    "decline_availability": "notificationWarning",
+    "toggle_attendance": "selection",
+    "create_competition": "impactMedium",
+    "tab_switch": "selection"
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the blue and white palette specified ('Tema dell'app colori blu e bianco'). The UI must feel clean and disciplined.",
+    "Do NOT display faces in any martial arts imagery. Use the provided abstract textures, belts, and silhouettes.",
+    "Implement a mandatory gradient-to-dark scrim pattern (top-to-bottom transparent to surfaceInverse) over the auth_background and hero image cards to ensure text readability.",
+    "For the Official creation flow, auto-generate or format the username as m.rossi based on the inputted first and last name.",
+    "Ensure the sticky primary CTA over scrolling content rule is applied in the Attendance Register (Save Attendance button).",
+    "Use standard Ionicons for the notification bell and navigation. Icons should be one weight/style (outlined-inactive / filled-active for tabs)."
+  ]
+}
