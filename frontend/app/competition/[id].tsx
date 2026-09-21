@@ -164,6 +164,14 @@ export default function CompetitionDetail() {
         </Text>
         <View style={styles.headerActions}>
           <Pressable
+            testID="open-report"
+            onPress={() => router.push({ pathname: "/competition-report", params: { id } })}
+            hitSlop={8}
+            style={styles.hIcon}
+          >
+            <Ionicons name="stats-chart-outline" size={21} color={colors.brandPrimary} />
+          </Pressable>
+          <Pressable
             testID="edit-competition"
             onPress={() => router.push({ pathname: "/competition-form", params: { id } })}
             hitSlop={8}

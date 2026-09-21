@@ -10,6 +10,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 import { spacing, fontSize } from "@/src/tokens";
 import { api, ApiError } from "@/src/api/client";
 import { AppButton, TextField } from "@/src/components/ui";
+import { DatePickerField } from "@/src/components/DatePickerField";
 import { useToast } from "@/src/components/Toast";
 
 type Comp = {
@@ -22,15 +23,6 @@ type Comp = {
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// auto-format digits into YYYY-MM-DD
-function maskDate(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 8);
-  let out = digits.slice(0, 4);
-  if (digits.length > 4) out += "-" + digits.slice(4, 6);
-  if (digits.length > 6) out += "-" + digits.slice(6, 8);
-  return out;
-}
 
 export default function CompetitionForm() {
   const styles = useStyles();
@@ -118,22 +110,18 @@ export default function CompetitionForm() {
           onChangeText={setName}
           error={errors.name}
         />
-        <TextField
+        <DatePickerField
           testID="comp-start"
           label="Data inizio"
-          placeholder="AAAA-MM-GG"
-          keyboardType="number-pad"
           value={start}
-          onChangeText={(v) => setStart(maskDate(v))}
+          onChange={setStart}
           error={errors.start}
         />
-        <TextField
+        <DatePickerField
           testID="comp-end"
           label="Data fine (opzionale)"
-          placeholder="AAAA-MM-GG"
-          keyboardType="number-pad"
           value={end}
-          onChangeText={(v) => setEnd(maskDate(v))}
+          onChange={setEnd}
           error={errors.end}
         />
         <TextField

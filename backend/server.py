@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 import os
 import re
 import logging
@@ -242,13 +243,47 @@ async def _dispatch_requests(comp: dict):
     )
 
 
+async def ensure_reminders_sent():
+    """Send a reminder to confirmed officials the day before the competition."""
+    today = date.today()
+    comps = await db.competitions.find(
+        {"deleted_at": None, "request_sent": True, "reminder_sent": {"$ne": True}}
+    ).to_list(1000)
+    for comp in comps:
+        try:
+            start = date.fromisoformat(comp["start_date"])
+        except Exception:
+            continue
+        if start >= today and today >= (start - timedelta(days=1)):
+            confirmed = await db.availabilities.find(
+                {"competition_id": comp["id"], "confirmed": True}
+            ).to_list(1000)
+            # Only latch the flag once we actually have someone to remind,
+            # otherwise reminders would be lost if the window opens before
+            # the master confirms any official.
+            if not confirmed:
+                continue
+            for a in confirmed:
+                await push_notification(
+                    a["official_id"], "reminder",
+                    "Promemoria gara",
+                    f"La gara «{comp['name']}» è in programma il {comp['start_date']}. "
+                    f"Ricordati di presentarti all'indirizzo: {comp['address']}.",
+                    comp["id"],
+                )
+            await db.competitions.update_one(
+                {"id": comp["id"]},
+                {"$set": {"reminder_sent": True, "reminder_sent_at": now_iso()}},
+            )
+
+
 # ----------------------------------------------------------------------------
 # Auth routes
 # ----------------------------------------------------------------------------
 @api_router.post("/auth/login")
 async def login(body: LoginIn):
     username = body.username.lower().strip()
-    user = await db.users.find_one({"username": username})
+    user = await db.users.find_one({"username": username, "deleted_at": None})
     if not user or not verify_password(body.password, user["password_hash"]) \
             or not user.get("active", True):
         raise HTTPException(status_code=401, detail="Username o password errati")
@@ -290,7 +325,7 @@ async def list_officials(_: Annotated[dict, Depends(master_only)]):
 @api_router.post("/officials", status_code=201)
 async def create_official(body: OfficialCreate, _: Annotated[dict, Depends(master_only)]):
     username = make_username(body.first_name, body.surname)
-    if await db.users.find_one({"username": username}):
+    if await db.users.find_one({"username": username, "deleted_at": None}):
         raise HTTPException(409, f"Username «{username}» già esistente")
     doc = {
         "id": new_id(),
@@ -303,7 +338,10 @@ async def create_official(body: OfficialCreate, _: Annotated[dict, Depends(maste
         "deleted_at": None,
         "created_at": now_iso(),
     }
-    await db.users.insert_one(doc)
+    try:
+        await db.users.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(409, f"Username «{username}» già esistente")
     return public_user(doc)
 
 
@@ -318,7 +356,9 @@ async def update_official(official_id: str, body: OfficialUpdate,
     sn = body.surname if body.surname is not None else user["surname"]
     if body.first_name is not None or body.surname is not None:
         new_username = make_username(fn, sn)
-        if new_username != user["username"] and await db.users.find_one({"username": new_username}):
+        if new_username != user["username"] and await db.users.find_one(
+            {"username": new_username, "deleted_at": None}
+        ):
             raise HTTPException(409, f"Username «{new_username}» già esistente")
         updates["first_name"] = fn.strip()
         updates["surname"] = sn.strip()
@@ -335,12 +375,13 @@ async def update_official(official_id: str, body: OfficialUpdate,
 
 @api_router.delete("/officials/{official_id}")
 async def delete_official(official_id: str, _: Annotated[dict, Depends(master_only)]):
-    res = await db.users.update_one(
-        {"id": official_id, "role": "official"},
+    user = await db.users.find_one({"id": official_id, "role": "official", "deleted_at": None})
+    if not user:
+        raise HTTPException(404, "Ufficiale non trovato")
+    await db.users.update_one(
+        {"id": official_id},
         {"$set": {"deleted_at": now_iso(), "active": False}},
     )
-    if res.matched_count == 0:
-        raise HTTPException(404, "Ufficiale non trovato")
     return {"ok": True}
 
 
@@ -371,6 +412,7 @@ async def competition_summary(comp: dict) -> dict:
 @api_router.get("/competitions")
 async def list_competitions(_: Annotated[dict, Depends(master_only)]):
     await ensure_requests_sent()
+    await ensure_reminders_sent()
     comps = await db.competitions.find({"deleted_at": None}).sort("start_date", 1).to_list(1000)
     return [await competition_summary(c) for c in comps]
 
@@ -510,6 +552,43 @@ async def record_attendance(comp_id: str, body: AttendanceIn,
     return {"ok": True}
 
 
+@api_router.get("/competitions/{comp_id}/report")
+async def competition_report(comp_id: str, _: Annotated[dict, Depends(master_only)]):
+    comp = await db.competitions.find_one({"id": comp_id, "deleted_at": None})
+    if not comp:
+        raise HTTPException(404, "Gara non trovata")
+    avails = await db.availabilities.find(
+        {"competition_id": comp_id, "confirmed": True}
+    ).to_list(1000)
+    officials = []
+    present = 0
+    for a in avails:
+        off = await db.users.find_one({"id": a["official_id"]})
+        if not off:
+            continue
+        attended = a.get("attended") is True
+        if attended:
+            present += 1
+        officials.append({
+            "official_name": f"{off['first_name']} {off['surname']}",
+            "username": off["username"],
+            "attended": attended,
+        })
+    officials.sort(key=lambda r: r["official_name"])
+    return {
+        "id": comp["id"],
+        "name": comp["name"],
+        "start_date": comp["start_date"],
+        "end_date": comp["end_date"],
+        "address": comp["address"],
+        "notes": comp.get("notes", ""),
+        "confirmed_count": len(officials),
+        "present_count": present,
+        "absent_count": len(officials) - present,
+        "officials": officials,
+    }
+
+
 # ----------------------------------------------------------------------------
 # Official-facing routes
 # ----------------------------------------------------------------------------
@@ -601,6 +680,7 @@ async def respond_availability(avail_id: str, body: RespondIn,
 async def list_notifications(user: Annotated[dict, Depends(current_user)]):
     if user["role"] == "official":
         await ensure_requests_sent()
+    await ensure_reminders_sent()
     notifs = await db.notifications.find(
         {"user_id": user["id"]}
     ).sort("created_at", -1).to_list(200)
@@ -619,6 +699,7 @@ async def list_notifications(user: Annotated[dict, Depends(current_user)]):
 async def unread_count(user: Annotated[dict, Depends(current_user)]):
     if user["role"] == "official":
         await ensure_requests_sent()
+    await ensure_reminders_sent()
     count = await db.notifications.count_documents({"user_id": user["id"], "read": False})
     return {"count": count}
 
@@ -649,7 +730,17 @@ async def root():
 # ----------------------------------------------------------------------------
 @app.on_event("startup")
 async def seed_master():
-    await db.users.create_index("username", unique=True, sparse=True)
+    # Username is unique only among non-deleted users (partial index), so a
+    # soft-deleted official's username can be reused when re-created.
+    try:
+        await db.users.drop_index("username_1")
+    except Exception:
+        pass
+    await db.users.create_index(
+        "username",
+        unique=True,
+        partialFilterExpression={"deleted_at": None},
+    )
     await db.users.create_index("id", unique=True)
     existing = await db.users.find_one({"username": MASTER_USERNAME})
     if not existing:

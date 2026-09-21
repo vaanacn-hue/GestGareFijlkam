@@ -35,6 +35,10 @@ export default function RootLayout() {
                       options={{ presentation: "modal" }}
                     />
                     <Stack.Screen name="settings" options={{ presentation: "modal" }} />
+                    <Stack.Screen
+                      name="competition-report"
+                      options={{ presentation: "modal" }}
+                    />
                     <Stack.Screen name="competition/[id]" />
                   </Stack>
                 </ToastProvider>

@@ -1,5 +1,5 @@
-import React from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import React, { useState, useMemo } from "react";
+import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,17 +20,37 @@ export default function Officials() {
   const qc = useQueryClient();
   const toast = useToast();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
+  const [search, setSearch] = useState("");
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["officials"],
     queryFn: () => api.get<AppUser[]>("/officials"),
   });
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return data ?? [];
+    return (data ?? []).filter(
+      (o) =>
+        `${o.first_name} ${o.surname}`.toLowerCase().includes(q) ||
+        o.username.toLowerCase().includes(q),
+    );
+  }, [data, search]);
+
   const toggleActive = useMutation({
     mutationFn: (o: AppUser) => api.patch(`/officials/${o.id}`, { active: !o.active }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["officials"] });
       toast.show("Ufficiale aggiornato", "success");
+    },
+    onError: (e: ApiError) => toast.show(e.detail, "error"),
+  });
+
+  const removeOfficial = useMutation({
+    mutationFn: (o: AppUser) => api.del(`/officials/${o.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["officials"] });
+      toast.show("Ufficiale eliminato", "success");
     },
     onError: (e: ApiError) => toast.show(e.detail, "error"),
   });
@@ -49,8 +69,28 @@ export default function Officials() {
         </Pressable>
       </View>
 
+      <View style={styles.searchWrap}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={18} color={colors.muted} />
+          <TextInput
+            testID="search-officials"
+            placeholder="Cerca ufficiale..."
+            placeholderTextColor={colors.muted}
+            value={search}
+            onChangeText={setSearch}
+            style={styles.searchInput}
+            autoCapitalize="none"
+          />
+          {search ? (
+            <Pressable testID="clear-search" onPress={() => setSearch("")} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+
       <FlatList
-        data={data ?? []}
+        data={filtered}
         keyExtractor={(o) => o.id}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: bottomChrome + 96, flexGrow: 1 }}
         refreshControl={
@@ -61,8 +101,12 @@ export default function Officials() {
             <View style={styles.emptyWrap}>
               <EmptyState
                 icon="people-outline"
-                title="Nessun ufficiale"
-                subtitle="Aggiungi gli ufficiali di gara. Lo username sarà m.cognome."
+                title={search ? "Nessun risultato" : "Nessun ufficiale"}
+                subtitle={
+                  search
+                    ? "Prova con un altro nome o username."
+                    : "Aggiungi gli ufficiali di gara. Lo username sarà m.cognome."
+                }
               />
             </View>
           ) : null
@@ -105,6 +149,14 @@ export default function Officials() {
                   color={item.active ? colors.warning : colors.success}
                 />
               </Pressable>
+              <Pressable
+                testID={`delete-official-${item.id}`}
+                onPress={() => removeOfficial.mutate(item)}
+                hitSlop={8}
+                style={styles.iconBtn}
+              >
+                <Ionicons name="trash-outline" size={21} color={colors.error} />
+              </Pressable>
             </View>
           </Card>
         )}
@@ -143,6 +195,23 @@ const useStyles = makeStyles((colors) => ({
     justifyContent: "center",
   },
   emptyWrap: { flex: 1, justifyContent: "center" },
+  searchWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceTertiary,
+    paddingHorizontal: spacing.md,
+  },
+  searchInput: { flex: 1, fontSize: fontSize.base, color: colors.onSurface, paddingVertical: 0 },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
   avatar: {
     width: 48,
@@ -157,7 +226,7 @@ const useStyles = makeStyles((colors) => ({
   name: { fontSize: fontSize.lg, fontWeight: "700", color: colors.onSurface },
   username: { fontSize: fontSize.base, color: colors.muted },
   actions: { flexDirection: "row", gap: spacing.xs },
-  iconBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: 34, height: 38, alignItems: "center", justifyContent: "center" },
   fab: {
     position: "absolute",
     right: spacing.lg,
