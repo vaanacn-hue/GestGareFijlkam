@@ -74,10 +74,14 @@ export default function Login() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.brandBlock, { paddingTop: insets.top + spacing["3xl"] }]}>
-          <View style={styles.logo}>
-            <Ionicons name="shield-checkmark" size={40} color="#FFFFFF" />
+          <View style={styles.logoBox}>
+            <Image
+              source={require("../assets/images/fijlkam-logo.png")}
+              style={styles.brandLogo}
+              contentFit="contain"
+              testID="fijlkam-logo"
+            />
           </View>
-          <Text style={styles.appName}>GaraMaster</Text>
           <Text style={styles.tagline}>Gestione presenze ufficiali di gara</Text>
         </View>
 
@@ -91,13 +95,6 @@ export default function Login() {
         >
           <Text style={styles.cardTitle}>Accedi</Text>
           <Text style={styles.cardSub}>Inserisci le tue credenziali per continuare</Text>
-
-          <Image
-            source={require("../assets/images/fijlkam-logo.png")}
-            style={styles.logoImg}
-            contentFit="contain"
-            testID="fijlkam-logo"
-          />
 
           <TextField
             testID="login-username"
@@ -139,20 +136,23 @@ export default function Login() {
 
 const useStyles = makeStyles((colors) => ({
   bg: { flex: 1, backgroundColor: colors.brand },
-  brandBlock: { alignItems: "center", paddingHorizontal: spacing.xl, gap: spacing.xs },
-  logo: {
-    width: 84,
-    height: 84,
+  brandBlock: { alignItems: "center", paddingHorizontal: spacing.xl, gap: spacing.md },
+  logoBox: {
+    backgroundColor: "#FFFFFF",
     borderRadius: radius.lg,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    width: "100%",
+    maxWidth: 320,
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
-  appName: { fontSize: 34, fontWeight: "900", color: "#FFFFFF", letterSpacing: 0.5 },
-  tagline: { fontSize: fontSize.base, color: "rgba(255,255,255,0.85)", fontWeight: "500" },
+  brandLogo: { width: "100%", height: 84 },
+  tagline: { fontSize: fontSize.base, color: "rgba(255,255,255,0.9)", fontWeight: "600" },
   spacer: { flex: 1, minHeight: spacing.xl },
   card: {
     backgroundColor: colors.surface,
@@ -163,8 +163,7 @@ const useStyles = makeStyles((colors) => ({
     gap: spacing.xs,
   },
   cardTitle: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.onSurface },
-  cardSub: { fontSize: fontSize.base, color: colors.muted, marginBottom: spacing.md },
-  logoImg: { width: "100%", height: 64, marginBottom: spacing.lg },
+  cardSub: { fontSize: fontSize.base, color: colors.muted, marginBottom: spacing.lg },
   errorRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginBottom: spacing.sm },
   errorText: { color: colors.error, fontSize: fontSize.base, fontWeight: "600", flexShrink: 1 },
 }));
