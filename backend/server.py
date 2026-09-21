@@ -168,6 +168,7 @@ class AttendanceIn(BaseModel):
 
 class SettingsIn(BaseModel):
     days_before: int = Field(ge=0, le=365)
+    reminder_days_before: int = Field(ge=0, le=365, default=1)
 
 
 # ----------------------------------------------------------------------------
@@ -190,9 +191,12 @@ async def push_notification(user_id: str, ntype: str, title: str, body: str,
 async def get_settings() -> dict:
     s = await db.settings.find_one({"id": "global"})
     if not s:
-        s = {"id": "global", "days_before": 7}
+        s = {"id": "global", "days_before": 7, "reminder_days_before": 1}
         await db.settings.insert_one(s)
-    return {"days_before": s.get("days_before", 7)}
+    return {
+        "days_before": s.get("days_before", 7),
+        "reminder_days_before": s.get("reminder_days_before", 1),
+    }
 
 
 async def ensure_requests_sent():
@@ -244,7 +248,9 @@ async def _dispatch_requests(comp: dict):
 
 
 async def ensure_reminders_sent():
-    """Send a reminder to confirmed officials the day before the competition."""
+    """Send a reminder to confirmed officials N days before the competition."""
+    settings = await get_settings()
+    reminder_days = settings["reminder_days_before"]
     today = date.today()
     comps = await db.competitions.find(
         {"deleted_at": None, "request_sent": True, "reminder_sent": {"$ne": True}}
@@ -254,7 +260,7 @@ async def ensure_reminders_sent():
             start = date.fromisoformat(comp["start_date"])
         except Exception:
             continue
-        if start >= today and today >= (start - timedelta(days=1)):
+        if start >= today and today >= (start - timedelta(days=reminder_days)):
             confirmed = await db.availabilities.find(
                 {"competition_id": comp["id"], "confirmed": True}
             ).to_list(1000)
@@ -306,7 +312,12 @@ async def read_settings(_: Annotated[dict, Depends(master_only)]):
 @api_router.put("/settings")
 async def update_settings(body: SettingsIn, _: Annotated[dict, Depends(master_only)]):
     await db.settings.update_one(
-        {"id": "global"}, {"$set": {"days_before": body.days_before}}, upsert=True
+        {"id": "global"},
+        {"$set": {
+            "days_before": body.days_before,
+            "reminder_days_before": body.reminder_days_before,
+        }},
+        upsert=True,
     )
     return await get_settings()
 
@@ -393,6 +404,7 @@ async def competition_summary(comp: dict) -> dict:
     available = sum(1 for a in avails if a["status"] == "available")
     confirmed = sum(1 for a in avails if a.get("confirmed"))
     pending = sum(1 for a in avails if a["status"] == "pending")
+    present = sum(1 for a in avails if a.get("attended") is True)
     return {
         "id": comp["id"],
         "name": comp["name"],
@@ -406,6 +418,7 @@ async def competition_summary(comp: dict) -> dict:
         "available_count": available,
         "confirmed_count": confirmed,
         "pending_count": pending,
+        "present_count": present,
     }
 
 
@@ -644,6 +657,25 @@ async def my_competitions(user: Annotated[dict, Depends(current_user)]):
             out.append(v)
     out.sort(key=lambda r: r["start_date"])
     return out
+
+
+@api_router.get("/my/stats")
+async def my_stats(user: Annotated[dict, Depends(current_user)]):
+    if user["role"] != "official":
+        return {"confirmed": 0, "present": 0, "absent": 0, "percentage": 0}
+    avails = await db.availabilities.find(
+        {"official_id": user["id"], "confirmed": True}
+    ).to_list(1000)
+    total = len(avails)
+    present = sum(1 for a in avails if a.get("attended") is True)
+    recorded = sum(1 for a in avails if a.get("attended") is not None)
+    percentage = round((present / recorded) * 100) if recorded else 0
+    return {
+        "confirmed": total,
+        "present": present,
+        "absent": recorded - present,
+        "percentage": percentage,
+    }
 
 
 @api_router.post("/availabilities/{avail_id}/respond")

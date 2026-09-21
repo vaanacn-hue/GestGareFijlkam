@@ -21,16 +21,19 @@ export default function Settings() {
   const toast = useToast();
 
   const [days, setDays] = useState<number | null>(null);
+  const [reminderDays, setReminderDays] = useState<number | null>(null);
 
   const { data } = useQuery({
     queryKey: ["settings"],
-    queryFn: () => api.get<{ days_before: number }>("/settings"),
+    queryFn: () => api.get<{ days_before: number; reminder_days_before: number }>("/settings"),
   });
 
   const value = days ?? data?.days_before ?? 7;
+  const reminderValue = reminderDays ?? data?.reminder_days_before ?? 1;
 
   const save = useMutation({
-    mutationFn: () => api.put("/settings", { days_before: value }),
+    mutationFn: () =>
+      api.put("/settings", { days_before: value, reminder_days_before: reminderValue }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["settings"] });
       qc.invalidateQueries({ queryKey: ["competitions"] });
@@ -41,6 +44,7 @@ export default function Settings() {
   });
 
   const set = (v: number) => setDays(Math.max(0, Math.min(365, v)));
+  const setReminder = (v: number) => setReminderDays(Math.max(0, Math.min(365, v)));
 
   return (
     <View style={styles.container}>
@@ -90,6 +94,54 @@ export default function Settings() {
                 style={[styles.preset, value === p && styles.presetActive]}
               >
                 <Text style={[styles.presetText, value === p && styles.presetTextActive]}>{p}g</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+
+        <Card style={{ marginTop: spacing.lg }}>
+          <Text style={styles.cardTitle}>Promemoria gara</Text>
+          <Text style={styles.cardSub}>
+            Giorni di anticipo con cui inviare il promemoria agli ufficiali confermati prima della
+            gara.
+          </Text>
+
+          <View style={styles.stepper}>
+            <Pressable
+              testID="reminder-minus"
+              onPress={() => setReminder(reminderValue - 1)}
+              style={styles.stepBtn}
+            >
+              <Ionicons name="remove" size={26} color={colors.brandPrimary} />
+            </Pressable>
+            <View style={styles.valueBox}>
+              <Text style={styles.valueNum} testID="reminder-value">
+                {reminderValue}
+              </Text>
+              <Text style={styles.valueLabel}>giorni prima</Text>
+            </View>
+            <Pressable
+              testID="reminder-plus"
+              onPress={() => setReminder(reminderValue + 1)}
+              style={styles.stepBtn}
+            >
+              <Ionicons name="add" size={26} color={colors.brandPrimary} />
+            </Pressable>
+          </View>
+
+          <View style={styles.presets}>
+            {[1, 2, 3, 5].map((p) => (
+              <Pressable
+                key={p}
+                testID={`reminder-preset-${p}`}
+                onPress={() => setReminder(p)}
+                style={[styles.preset, reminderValue === p && styles.presetActive]}
+              >
+                <Text
+                  style={[styles.presetText, reminderValue === p && styles.presetTextActive]}
+                >
+                  {p}g
+                </Text>
               </Pressable>
             ))}
           </View>

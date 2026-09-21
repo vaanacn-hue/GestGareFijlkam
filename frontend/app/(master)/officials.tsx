@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, Share, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -55,18 +55,47 @@ export default function Officials() {
     onError: (e: ApiError) => toast.show(e.detail, "error"),
   });
 
+  const exportList = async () => {
+    const list = data ?? [];
+    if (!list.length) {
+      toast.show("Nessun ufficiale da esportare", "info");
+      return;
+    }
+    const lines = [
+      "Nome;Cognome;Username;Stato",
+      ...list.map(
+        (o) => `${o.first_name};${o.surname};${o.username};${o.active ? "Attivo" : "Disattivato"}`,
+      ),
+    ];
+    try {
+      await Share.share({ message: lines.join("\n"), title: "Anagrafica ufficiali" });
+    } catch {
+      toast.show("Condivisione annullata", "info");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Text style={styles.headerTitle}>Ufficiali</Text>
-        <Pressable
-          testID="add-official-header"
-          onPress={() => router.push("/official-form")}
-          style={styles.addBtn}
-          hitSlop={8}
-        >
-          <Ionicons name="add" size={26} color={colors.onBrandPrimary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            testID="export-officials"
+            onPress={exportList}
+            style={styles.exportBtn}
+            hitSlop={8}
+          >
+            <Ionicons name="share-outline" size={22} color={colors.brandPrimary} />
+          </Pressable>
+          <Pressable
+            testID="add-official-header"
+            onPress={() => router.push("/official-form")}
+            style={styles.addBtn}
+            hitSlop={8}
+          >
+            <Ionicons name="add" size={26} color={colors.onBrandPrimary} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
@@ -186,6 +215,15 @@ const useStyles = makeStyles((colors) => ({
     borderBottomColor: colors.border,
   },
   headerTitle: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.onSurface },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  exportBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.brandTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   addBtn: {
     width: 40,
     height: 40,

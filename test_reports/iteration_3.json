@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 3 testing (logout bug fix + reminder_days_before + my/stats + Storico segment + export officials). PRIORITY BUG CONFIRMED FIXED: logout-button now correctly navigates to /login after signOut on both master dashboard AND official home; login-username input becomes visible after tap in both roles (verified live). Backend: 48 pytest cases collected — 47 pass reliably, 1 (test_password_reset_login) is flaky ONLY under pytest-xdist due to session-scoped official_token fixture racing with password mutation across workers (proven clean with 4/4 pass in sequential run, -o addopts=''). All new endpoints validated: GET /api/settings returns reminder_days_before; PUT /api/settings persists both days_before AND reminder_days_before; GET /api/my/stats returns {confirmed, present, absent, percentage} shape and grows after a full accept→confirm→attendance flow (verified 0→1 for confirmed and present, percentage stays 0-100); GET /api/competitions summary now includes present_count and correctly reflects recorded attendance (0 before, 1 after). Iter2 HIGH bug regression: soft-deleted username re-creation now returns 201 (was 409) — FIXED. Frontend: master Settings screen (/settings) exposes days-value, days-plus, days-minus, reminder-value, reminder-plus, reminder-minus, save-settings, preset-14, reminder-preset-2 — all visible; tapping reminder-plus increments value and save-settings navigates back showing 'Impostazioni salvate' toast. master competitions screen has segment-upcoming + segment-past segmented control; tapping Storico switches to empty state 'Nessuna gara passata' (correct, all seeded comps are future). master officials screen has export-officials button (opens web Share API, dismissal shows 'Condivisione annullata' toast — pass per spec) and search-officials input filters live (typing 'rossi' -> only Mario Rossi remains, Verdi hidden). official home shows official-stats strip with 15 Gare svolte / 15 Presenze / 100% Presenza. RN-Web warnings observed but non-blocking (shadow*, useNativeDriver, props.pointerEvents — same as iter2). Not retested: reminder_sent empty-latch race (iter2 HIGH #2) still not fixed in code and remains a risk.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "ensure_reminders_sent()", "issue": "STILL UNFIXED from iter2: reminder_sent flag is set to True even when the confirmed list is empty. Any GET /notifications, /notifications/unread-count, or /competitions call that lands in the reminder window BEFORE the master confirms any official permanently disables reminders for that competition. Fix: guard 'reminder_sent=True' behind 'len(confirmed) > 0', or track reminders per availability row.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "RN-Web console warning: 'shadow*' style props are deprecated. Use 'boxShadow'. Reference: /app/frontend/app/(master)/officials.tsx fab styles and /app/frontend/app/(master)/competitions.tsx segment active style. Cosmetic; migrate to boxShadow to clean warnings."},
+      {"component": "useNativeDriver", "issue": "RN-Web warning during Modal open in /app/frontend/app/settings.tsx and DatePickerField.tsx: 'Animated: useNativeDriver is not supported'. Consider Platform.OS === 'web' ? animationType='none' to suppress."},
+      {"component": "props.pointerEvents", "issue": "RN-Web warning 'props.pointerEvents is deprecated'. Upstream RN internals; safe to ignore until upstream patch."}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_garamaster.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "HIGH (carried over from iter2): fix ensure_reminders_sent() in /app/backend/server.py — only set reminder_sent=True when at least one reminder was pushed, otherwise the flag latches to empty and confirmations after the reminder window never trigger a reminder.",
+    "OPTIONAL: rework the session-scoped official_token fixture in /app/backend/tests/test_garamaster.py to per-class scope (or serialize TestOfficialsAdvanced) — currently flaky under pytest-xdist because the same token is reused after PATCH resets the password on another worker.",
+    "OPTIONAL: migrate remaining shadow* -> boxShadow in officials.tsx (fab) and competitions.tsx segActive.",
+    "OPTIONAL: silence useNativeDriver warning by disabling Modal animation on web (Platform.OS === 'web')."
+  ],
+  "critical_code_review_comments": [
+    "server.py my_stats correctly guards division-by-zero via 'recorded' count and returns int percentage — clean.",
+    "server.py competition_summary now includes present_count from attended=True count — matches product spec.",
+    "master/index.tsx and official/index.tsx handleLogout implement router.replace('/login') after signOut — canonical fix, session cannot be restored via back button.",
+    "Settings screen SettingsIn model uses default=1 for reminder_days_before — backward compatible with clients that only send days_before.",
+    "get_settings() migrates existing docs implicitly (via .get with default) — no explicit migration needed."
+  ],
+  "updated_files": ["/app/backend/tests/test_garamaster.py", "/app/test_reports/iteration_3.json"],
+  "success_rate": {"backend": "100% sequentially (48/48); 47/48 under xdist due to fixture race (not a product bug)", "frontend": "100% of tested flows (logout master+official, settings stepper+preset+save, storico segment, official-stats, export-officials, search-officials)"},
+  "seed_data_creation": "test_garamaster.py auto-creates and cleans TEST_Torneo, TEST_ReportGara, TEST_StatsGara competitions and Luca <uniq>, Giulia <uniq> officials each run. No leftover data expected.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "PRIORITY logout bug fix VERIFIED (both roles). All 4 new iter3 features working end-to-end. Remaining known backend bug: ensure_reminders_sent() reminder_sent-latch-to-empty (iter2 HIGH, unfixed). New iter3 testIDs: reminder-value, reminder-plus, reminder-minus, reminder-preset-<N>, segment-upcoming, segment-past, export-officials, official-stats. Run backend suite: pytest backend/tests/test_garamaster.py -v (sequential) OR pytest backend/tests/test_garamaster.py --junitxml=... (may show 1 flaky in TestOfficialsAdvanced.test_password_reset_login under xdist — safe to retry once).",
+  "rca_of_issue": "Logout regression: root cause was that useAuth().signOut cleared session state but the master/official layouts do not automatically unmount on state change — the current route was still (master)/(official) so nothing forced navigation to /login. Fix (verified) is calling router.replace('/login') immediately after signOut in the handleLogout of both /app/frontend/app/(master)/index.tsx (line 44-47) and /app/frontend/app/(official)/index.tsx (line 50-53). testID logout-button consistent across both. Screenshots and URL asserts confirm redirect works in both flows."
+}

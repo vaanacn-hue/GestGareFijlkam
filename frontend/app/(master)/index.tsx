@@ -41,6 +41,11 @@ export default function Dashboard() {
   const { signOut } = useAuth();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
 
+  const handleLogout = async () => {
+    await signOut();
+    router.replace("/login");
+  };
+
   const comps = useQuery({
     queryKey: ["competitions"],
     queryFn: () => api.get<Comp[]>("/competitions"),
@@ -68,7 +73,7 @@ export default function Dashboard() {
         right={
           <View style={styles.heroActions}>
             <BellButton light onPress={() => router.push("/(master)/notifications")} />
-            <Pressable testID="logout-button" onPress={signOut} hitSlop={8} style={styles.logoutBtn}>
+            <Pressable testID="logout-button" onPress={handleLogout} hitSlop={8} style={styles.logoutBtn}>
               <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
             </Pressable>
           </View>

@@ -47,6 +47,11 @@ export default function OfficialHome() {
   const { user, signOut } = useAuth();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
 
+  const handleLogout = async () => {
+    await signOut();
+    router.replace("/login");
+  };
+
   const requests = useQuery({
     queryKey: ["my-requests"],
     queryFn: () => api.get<Req[]>("/my/requests"),
@@ -55,6 +60,13 @@ export default function OfficialHome() {
     queryKey: ["my-competitions"],
     queryFn: () => api.get<MyComp[]>("/my/competitions"),
   });
+  const stats = useQuery({
+    queryKey: ["my-stats"],
+    queryFn: () =>
+      api.get<{ confirmed: number; present: number; absent: number; percentage: number }>(
+        "/my/stats",
+      ),
+  });
 
   const respond = useMutation({
     mutationFn: ({ availId, status }: { availId: string; status: string }) =>
@@ -62,6 +74,7 @@ export default function OfficialHome() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["my-requests"] });
       qc.invalidateQueries({ queryKey: ["my-competitions"] });
+      qc.invalidateQueries({ queryKey: ["my-stats"] });
       qc.invalidateQueries({ queryKey: ["unread-count"] });
       toast.show(
         v.status === "available" ? "Hai dato disponibilità" : "Risposta inviata",
@@ -85,7 +98,7 @@ export default function OfficialHome() {
         right={
           <View style={styles.heroActions}>
             <BellButton light onPress={() => router.push("/(official)/notifications")} />
-            <Pressable testID="logout-button" onPress={signOut} hitSlop={8} style={styles.logoutBtn}>
+            <Pressable testID="logout-button" onPress={handleLogout} hitSlop={8} style={styles.logoutBtn}>
               <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
@@ -100,11 +113,32 @@ export default function OfficialHome() {
             onRefresh={() => {
               requests.refetch();
               myComps.refetch();
+              stats.refetch();
             }}
             tintColor={colors.brandPrimary}
           />
         }
       >
+        {/* Riepilogo ufficiale */}
+        <View style={styles.statsStrip} testID="official-stats">
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{stats.data?.confirmed ?? 0}</Text>
+            <Text style={styles.statLabel}>Gare svolte</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNum}>{stats.data?.present ?? 0}</Text>
+            <Text style={styles.statLabel}>Presenze</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNum, { color: colors.success }]}>
+              {stats.data?.percentage ?? 0}%
+            </Text>
+            <Text style={styles.statLabel}>Presenza</Text>
+          </View>
+        </View>
+
         {/* Pending requests */}
         {reqList.length > 0 && (
           <SectionHeader title="Richieste di disponibilità" />
@@ -216,6 +250,20 @@ const useStyles = makeStyles((colors) => ({
   container: { flex: 1, backgroundColor: colors.surfaceSecondary },
   heroActions: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   logoutBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  statsStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  statItem: { flex: 1, alignItems: "center", gap: 2 },
+  statDivider: { width: 1, height: 36, backgroundColor: colors.divider },
+  statNum: { fontSize: 26, fontWeight: "900", color: colors.brandPrimary },
+  statLabel: { fontSize: fontSize.sm, color: colors.muted, fontWeight: "600" },
   reqCard: { marginBottom: spacing.md, gap: spacing.xs, borderColor: colors.warning, borderWidth: 1 },
   reqBadgeRow: { flexDirection: "row" },
   reqName: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface, marginTop: spacing.xs },

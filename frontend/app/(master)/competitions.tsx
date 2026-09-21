@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,6 +21,7 @@ type Comp = {
   available_count: number;
   confirmed_count: number;
   pending_count: number;
+  present_count: number;
   total_requests: number;
   request_sent: boolean;
 };
@@ -31,11 +32,20 @@ export default function Competitions() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const bottomChrome = usesNativeTabs ? insets.bottom : 0;
+  const [segment, setSegment] = useState<"upcoming" | "past">("upcoming");
+  const today = new Date().toISOString().slice(0, 10);
 
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["competitions"],
     queryFn: () => api.get<Comp[]>("/competitions"),
   });
+
+  const filtered = useMemo(() => {
+    const list = data ?? [];
+    return list.filter((c) =>
+      segment === "past" ? c.end_date < today : c.end_date >= today,
+    );
+  }, [data, segment, today]);
 
   return (
     <View style={styles.container}>
@@ -51,8 +61,31 @@ export default function Competitions() {
         </Pressable>
       </View>
 
+      <View style={styles.segmentWrap}>
+        <View style={styles.segment}>
+          <Pressable
+            testID="segment-upcoming"
+            onPress={() => setSegment("upcoming")}
+            style={[styles.segBtn, segment === "upcoming" && styles.segActive]}
+          >
+            <Text style={[styles.segText, segment === "upcoming" && styles.segTextActive]}>
+              In programma
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="segment-past"
+            onPress={() => setSegment("past")}
+            style={[styles.segBtn, segment === "past" && styles.segActive]}
+          >
+            <Text style={[styles.segText, segment === "past" && styles.segTextActive]}>
+              Storico
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
       <FlatList
-        data={data ?? []}
+        data={filtered}
         keyExtractor={(c) => c.id}
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: bottomChrome + 96, flexGrow: 1 }}
         refreshControl={
@@ -63,8 +96,12 @@ export default function Competitions() {
             <View style={styles.emptyWrap}>
               <EmptyState
                 icon="calendar-outline"
-                title="Nessuna gara"
-                subtitle="Tocca + per programmare la prima gara."
+                title={segment === "past" ? "Nessuna gara passata" : "Nessuna gara"}
+                subtitle={
+                  segment === "past"
+                    ? "Le gare concluse appariranno qui con le presenze registrate."
+                    : "Tocca + per programmare la prima gara."
+                }
               />
             </View>
           ) : null
@@ -89,10 +126,19 @@ export default function Competitions() {
                 </Text>
               </View>
               <View style={styles.badges}>
-                {item.confirmed_count > 0 && <Badge label={`${item.confirmed_count} confermati`} tone="success" />}
-                {item.available_count > 0 && <Badge label={`${item.available_count} disponibili`} tone="info" />}
-                {item.pending_count > 0 && <Badge label={`${item.pending_count} in attesa`} tone="warning" />}
-                {!item.request_sent && <Badge label="Richiesta non inviata" tone="neutral" />}
+                {segment === "past" ? (
+                  <Badge
+                    label={`${item.present_count}/${item.confirmed_count} presenti`}
+                    tone={item.present_count > 0 ? "success" : "neutral"}
+                  />
+                ) : (
+                  <>
+                    {item.confirmed_count > 0 && <Badge label={`${item.confirmed_count} confermati`} tone="success" />}
+                    {item.available_count > 0 && <Badge label={`${item.available_count} disponibili`} tone="info" />}
+                    {item.pending_count > 0 && <Badge label={`${item.pending_count} in attesa`} tone="warning" />}
+                    {!item.request_sent && <Badge label="Richiesta non inviata" tone="neutral" />}
+                  </>
+                )}
               </View>
             </Card>
           </Pressable>
@@ -119,10 +165,31 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
     backgroundColor: colors.surface,
+  },
+  headerTitle: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.onSurface },
+  segmentWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerTitle: { fontSize: fontSize["2xl"], fontWeight: "800", color: colors.onSurface },
+  segment: {
+    flexDirection: "row",
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: radius.md,
+    padding: 4,
+  },
+  segBtn: { flex: 1, height: 38, alignItems: "center", justifyContent: "center", borderRadius: radius.sm },
+  segActive: {
+    backgroundColor: colors.surface,
+    shadowColor: "#0B162C",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  segText: { fontSize: fontSize.base, fontWeight: "700", color: colors.muted },
+  segTextActive: { color: colors.brandPrimary },
   addBtn: {
     width: 40,
     height: 40,

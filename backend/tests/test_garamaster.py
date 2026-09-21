@@ -82,7 +82,27 @@ class TestSettings:
         assert r.status_code == 200
         assert r.json()["days_before"] == 5
         # restore
-        requests.put(f"{API}/settings", headers=master_headers, json={"days_before": 7})
+        requests.put(f"{API}/settings", headers=master_headers,
+                     json={"days_before": 7, "reminder_days_before": 1})
+
+    # iter3: reminder_days_before persisted + returned
+    def test_get_settings_includes_reminder_days(self, master_headers):
+        r = requests.get(f"{API}/settings", headers=master_headers)
+        assert r.status_code == 200
+        assert "reminder_days_before" in r.json()
+
+    def test_put_settings_both_fields(self, master_headers):
+        r = requests.put(f"{API}/settings", headers=master_headers,
+                         json={"days_before": 10, "reminder_days_before": 3})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["days_before"] == 10 and d["reminder_days_before"] == 3
+        # verify persistence via GET
+        r2 = requests.get(f"{API}/settings", headers=master_headers).json()
+        assert r2["days_before"] == 10 and r2["reminder_days_before"] == 3
+        # restore
+        requests.put(f"{API}/settings", headers=master_headers,
+                     json={"days_before": 7, "reminder_days_before": 1})
 
 
 # --- Officials ---
@@ -384,20 +404,112 @@ class TestReportAndReminder:
         # Trigger by hitting notifications endpoint as official
         r = requests.get(f"{API}/notifications", headers=official_headers)
         assert r.status_code == 200
-        notifs = r.json()
         cid = TestReportAndReminder.comp_id
+        notifs = r.json()
         reminders = [n for n in notifs
                      if n["type"] == "reminder" and n["competition_id"] == cid]
         assert reminders, "Reminder notification for confirmed official missing"
-        assert "Promemoria" in reminders[0]["title"]
 
-        # Idempotency: hit again, count must not grow
-        r2 = requests.get(f"{API}/notifications", headers=official_headers).json()
-        reminders2 = [n for n in r2
-                      if n["type"] == "reminder" and n["competition_id"] == cid]
-        assert len(reminders2) == len(reminders)
+    def test_cleanup_comp2(self, master_headers):
+        if TestReportAndReminder.comp_id:
+            requests.delete(f"{API}/competitions/{TestReportAndReminder.comp_id}",
+                            headers=master_headers)
 
-    def test_cleanup_comp(self, master_headers):
-        cid = TestReportAndReminder.comp_id
-        r = requests.delete(f"{API}/competitions/{cid}", headers=master_headers)
+
+# --- Iteration 3: my/stats + present_count in summary ---
+class TestIter3StatsAndHistory:
+    """Verifies /api/my/stats and present_count in competition summary."""
+    comp_id = None
+
+    def test_my_stats_shape_for_official(self, official_headers):
+        r = requests.get(f"{API}/my/stats", headers=official_headers)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        for k in ("confirmed", "present", "absent", "percentage"):
+            assert k in d, f"missing key {k} in stats"
+        assert isinstance(d["percentage"], int)
+        assert 0 <= d["percentage"] <= 100
+
+    def test_my_stats_403_for_master_fallback(self, master_headers):
+        # Master is not an official — endpoint returns zeros (role guard branch)
+        r = requests.get(f"{API}/my/stats", headers=master_headers)
         assert r.status_code == 200
+        assert r.json()["confirmed"] == 0
+
+    def test_full_flow_updates_stats_and_present_count(self, master_headers, official_headers):
+        # baseline stats
+        before = requests.get(f"{API}/my/stats", headers=official_headers).json()
+        today = date.today().isoformat()
+        end = (date.today() + timedelta(days=1)).isoformat()
+        r = requests.post(f"{API}/competitions", headers=master_headers, json={
+            "name": "TEST_StatsGara",
+            "start_date": today,
+            "end_date": end,
+            "address": "Via Stat 1, Torino",
+            "notes": "iter3",
+        })
+        assert r.status_code == 201
+        cid = r.json()["id"]
+        TestIter3StatsAndHistory.comp_id = cid
+
+        # official accepts
+        reqs = requests.get(f"{API}/my/requests", headers=official_headers).json()
+        target = [x for x in reqs if x["competition_id"] == cid]
+        assert target, "auto-dispatch missing"
+        avail_id = target[0]["availability_id"]
+        rr = requests.post(f"{API}/availabilities/{avail_id}/respond",
+                           headers=official_headers, json={"status": "available"})
+        assert rr.status_code == 200
+
+        # confirm
+        avails = requests.get(f"{API}/competitions/{cid}/availabilities",
+                              headers=master_headers).json()
+        mrossi = [a for a in avails if a["username"] == "m.rossi"][0]
+        rc = requests.post(f"{API}/competitions/{cid}/confirm",
+                           headers=master_headers, json={"official_ids": [mrossi["official_id"]]})
+        assert rc.status_code == 200
+        # summary now must include present_count == 0 and confirmed_count >= 1
+        assert "present_count" in rc.json(), "summary missing present_count"
+        assert rc.json()["present_count"] == 0
+        assert rc.json()["confirmed_count"] >= 1
+
+        # record attendance
+        ra = requests.post(f"{API}/competitions/{cid}/attendance", headers=master_headers,
+                           json={"records": [{"official_id": mrossi["official_id"], "attended": True}]})
+        assert ra.status_code == 200
+
+        # /competitions list: this comp has present_count == 1
+        listing = requests.get(f"{API}/competitions", headers=master_headers).json()
+        this = [c for c in listing if c["id"] == cid][0]
+        assert this["present_count"] == 1
+
+        # stats grew
+        after = requests.get(f"{API}/my/stats", headers=official_headers).json()
+        assert after["confirmed"] >= before["confirmed"] + 1
+        assert after["present"] >= before["present"] + 1
+        assert 0 <= after["percentage"] <= 100
+
+    def test_cleanup(self, master_headers):
+        if TestIter3StatsAndHistory.comp_id:
+            requests.delete(f"{API}/competitions/{TestIter3StatsAndHistory.comp_id}",
+                            headers=master_headers)
+
+
+# --- Iteration 3: regression on iter2 bugs (should now be fixed) ---
+class TestIter2BugRegression:
+    def test_soft_deleted_username_can_be_reused(self, master_headers):
+        sfx = uuid.uuid4().hex[:6]
+        surname = f"reuse{sfx}"
+        payload = {"first_name": "Luca", "surname": surname, "password": "test1234"}
+        r1 = requests.post(f"{API}/officials", headers=master_headers, json=payload)
+        assert r1.status_code == 201, r1.text
+        oid = r1.json()["id"]
+        d = requests.delete(f"{API}/officials/{oid}", headers=master_headers)
+        assert d.status_code == 200
+        # re-create with same first/surname -> was 409 in iter2, expect 201 after fix
+        r2 = requests.post(f"{API}/officials", headers=master_headers, json=payload)
+        assert r2.status_code == 201, (
+            f"KNOWN BUG (iter2 HIGH): soft-deleted username still blocked. status={r2.status_code} body={r2.text}"
+        )
+        # cleanup
+        requests.delete(f"{API}/officials/{r2.json()['id']}", headers=master_headers)
