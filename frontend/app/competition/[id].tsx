@@ -27,6 +27,7 @@ type Comp = {
   address: string;
   notes: string;
   request_sent: boolean;
+  required_officials: number;
 };
 
 type Avail = {
@@ -34,7 +35,7 @@ type Avail = {
   official_id: string;
   official_name: string;
   username: string;
-  status: "pending" | "available" | "unavailable";
+  status: "pending" | "available" | "unavailable" | "convoked" | "not_requested";
   confirmed: boolean;
   attended: boolean | null;
 };
@@ -138,9 +139,6 @@ export default function CompetitionDetail() {
 
   const c = comp.data;
   const list = avail.data ?? [];
-  const available = list.filter((a) => a.status === "available");
-  const unavailable = list.filter((a) => a.status === "unavailable");
-  const pending = list.filter((a) => a.status === "pending");
   const confirmedList = list.filter((a) => a.confirmed);
 
   const statusBadge = (a: Avail) =>
@@ -148,8 +146,12 @@ export default function CompetitionDetail() {
       <Badge label="Disponibile" tone="success" />
     ) : a.status === "unavailable" ? (
       <Badge label="Non disponibile" tone="error" />
-    ) : (
+    ) : a.status === "convoked" ? (
+      <Badge label="Convocato" tone="brand" />
+    ) : a.status === "pending" ? (
       <Badge label="In attesa" tone="warning" />
+    ) : (
+      <Badge label="Non contattato" tone="neutral" />
     );
 
   return (
@@ -205,6 +207,19 @@ export default function CompetitionDetail() {
               <Text style={styles.infoText}>{c.notes}</Text>
             </View>
           ) : null}
+          {c.required_officials > 0 ? (
+            <View style={styles.infoRow}>
+              <Ionicons name="people-outline" size={18} color={colors.brandPrimary} />
+              <Text style={styles.infoText}>
+                {confirmedList.length}/{c.required_officials} ufficiali convocati
+              </Text>
+              {confirmedList.length >= c.required_officials ? (
+                <Badge label="Completo" tone="success" />
+              ) : (
+                <Badge label={`Mancano ${c.required_officials - confirmedList.length}`} tone="warning" />
+              )}
+            </View>
+          ) : null}
           {!c.request_sent ? (
             <AppButton
               testID="send-request"
@@ -249,17 +264,18 @@ export default function CompetitionDetail() {
           list.length === 0 ? (
             <Card>
               <EmptyState
-                icon="paper-plane-outline"
-                title="Nessuna richiesta"
-                subtitle="Invia la richiesta di disponibilità per raccogliere le risposte."
+                icon="people-outline"
+                title="Nessun ufficiale"
+                subtitle="Aggiungi ufficiali dall'apposita scheda per poterli convocare."
               />
             </Card>
           ) : (
             <>
               <Text style={styles.hint}>
-                Seleziona gli ufficiali disponibili da confermare per la gara.
+                Seleziona gli ufficiali da convocare. Puoi convocare anche chi non ha ancora dato
+                disponibilità.
               </Text>
-              {available.map((a) => {
+              {list.map((a) => {
                 const sel = selectedSet.has(a.official_id);
                 return (
                   <Pressable
@@ -280,15 +296,6 @@ export default function CompetitionDetail() {
                   </Pressable>
                 );
               })}
-              {[...pending, ...unavailable].map((a) => (
-                <Card key={a.id} style={styles.availRowMuted}>
-                  <View style={styles.availInfo}>
-                    <Text style={styles.availName}>{a.official_name}</Text>
-                    <Text style={styles.availUser}>@{a.username}</Text>
-                  </View>
-                  {statusBadge(a)}
-                </Card>
-              ))}
             </>
           )
         ) : confirmedList.length === 0 ? (
@@ -338,7 +345,7 @@ export default function CompetitionDetail() {
         <View style={[styles.cta, { paddingBottom: insets.bottom + spacing.md }]}>
           <AppButton
             testID="confirm-officials"
-            title={`Conferma presenze (${selectedSet.size})`}
+            title={`Convoca / Conferma (${selectedSet.size})`}
             icon="checkmark-done"
             loading={confirmM.isPending}
             onPress={() => confirmM.mutate()}

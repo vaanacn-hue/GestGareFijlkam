@@ -21,6 +21,7 @@ type Comp = {
   available_count: number;
   confirmed_count: number;
   pending_count: number;
+  unavailable_count: number;
   present_count: number;
   total_requests: number;
   request_sent: boolean;
@@ -136,6 +137,7 @@ export default function Competitions() {
                     {item.confirmed_count > 0 && <Badge label={`${item.confirmed_count} confermati`} tone="success" />}
                     {item.available_count > 0 && <Badge label={`${item.available_count} disponibili`} tone="info" />}
                     {item.pending_count > 0 && <Badge label={`${item.pending_count} in attesa`} tone="warning" />}
+                    {item.unavailable_count > 0 && <Badge label={`${item.unavailable_count} non disp.`} tone="error" />}
                     {!item.request_sent && <Badge label="Richiesta non inviata" tone="neutral" />}
                   </>
                 )}

@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 4 (Direct Convocation) — FULLY VERIFIED backend + frontend. Backend: added /app/backend/tests/test_iter4_convocation.py (6 new tests) and re-ran full suite -> 54/54 pass. Confirmed (a) GET /api/competitions/{id}/availabilities now returns ALL active officials with status='not_requested' for those without a record (verified on a brand-new master-created official 'Sara Neri -> s.neri'); (b) POST /api/competitions/{id}/confirm creates a record with status='convoked', confirmed=True and increments confirmed_count when the target has no prior availability record; (c) removing that purely-convoked official from a subsequent confirm call DELETES the record (row reverts to 'not_requested', confirmed=False, confirmed_count drops); (d) the convoked official immediately sees the competition in GET /api/my/competitions with confirmed=True and status='convoked'; (e) the notification pushed has type='confirmation', title='Sei stato convocato!' and body contains the competition address. Frontend: on the master competition detail Disponibilità tab, all 3 active officials render each with checkbox testID select-<officialId> and correct status badges — verified live 'Disponibile' (m.rossi), 'Non contattato' (g.verdi, l.fusco). The CTA is 'Convoca / Conferma (N)' and reflects the live selection count. Tapping select-<g.verdi-id> then confirm-officials converts g.verdi's badge to 'Convocato' and persists (visible on official g.verdi's home under 'Gare confermate' with 'Confermato' + address, and unread notifications badge 9+). No new backend bugs. Carried-over HIGH bug from iter2 (ensure_reminders_sent latching reminder_sent=True on empty confirmed list) is STILL PRESENT in server.py — unchanged code path — recommend fix in a future iteration.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "ensure_reminders_sent()", "issue": "STILL UNFIXED from iter2/iter3: reminder_sent flag is set to True even when the confirmed list is empty for that competition. Any GET /notifications, /notifications/unread-count, or /competitions call inside the reminder window BEFORE the master confirms any official permanently disables reminders for that competition. Fix: guard reminder_sent=True behind len(confirmed) > 0, or track reminders per availability row.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "RN-Web console warning still present: 'shadow*' style props are deprecated. Use 'boxShadow'. Cosmetic; see /app/frontend/app/(master)/officials.tsx fab and /app/frontend/app/(master)/competitions.tsx segActive."},
+      {"component": "useNativeDriver", "issue": "RN-Web warning during modal/animation on web preview (settings modal + DatePickerField): 'Animated: useNativeDriver is not supported'. Non-blocking; consider Platform.OS === 'web' ? animationType='none'."},
+      {"component": "props.pointerEvents", "issue": "RN-Web warning 'props.pointerEvents is deprecated'. Upstream RN internals; safe to ignore."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4_convocation.py",
+    "/app/backend/tests/test_garamaster.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "HIGH (still carried over from iter2/iter3): fix ensure_reminders_sent() in /app/backend/server.py — only set reminder_sent=True when at least one reminder was pushed, otherwise the flag latches to empty and confirmations after the reminder window never trigger a reminder.",
+    "OPTIONAL cosmetic: migrate shadow*->boxShadow on officials.tsx fab and competitions.tsx segActive.",
+    "OPTIONAL cosmetic: disable Modal animation on web to silence useNativeDriver warning."
+  ],
+  "critical_code_review_comments": [
+    "competition_availabilities correctly LEFT JOINS active officials with existing availability records and synthesizes status='not_requested' for un-recorded officials — matches new spec.",
+    "confirm_officials cleanly handles 3 cases: (1) existing record -> flip confirmed=True and notify with 'Sei stato convocato!' if status not 'available', (2) no record -> insert status='convoked' + notify direct, (3) removed from selection -> delete purely-convoked or unset confirmed for real responders.",
+    "competition/[id].tsx renders every row from the API (no client-side filter), uses select-<officialId> testID, correct badge tone map for 'convoked' and 'not_requested' — spec compliant.",
+    "Notification title branches ('Sei stato convocato!' vs 'Presenza confermata!') are computed correctly based on whether the official previously declared availability.",
+    "Purely-convoked deletion path (delete_one when status=='convoked' and un-selected) prevents the record from lingering as unconfirmed convoked — clean."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter4_convocation.py",
+    "/app/test_reports/iteration_4.json",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "success_rate": {"backend": "100% (54/54 including 6 new iter4 tests)", "frontend": "100% of tested flows (login master + open comp + Disponibilità lists all officials with correct badges + select 'Non contattato' official + convoke -> badge flips to Convocato + convoked official sees comp in Gare confermate)"},
+  "seed_data_creation": "test_iter4_convocation.py auto-creates and cleans a fresh 'Sara neri<uniq>' official + 'TEST_ConvocationGara' competition (2027-11-15). No leftover data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter4 direct-convocation feature complete + verified. New iter4 testIDs on competition/[id].tsx: select-<officialId>, confirm-officials label='Convoca / Conferma (N)'. Backend availabilities returns full official roster with status='not_requested' for un-recorded, sorted by (available, convoked, pending, not_requested, unavailable). Only remaining known bug is the reminder_sent latch (iter2, HIGH). Backend suite runs clean sequentially and (after iter3 fixture fix) also under xdist.",
+  "rca_of_issue": "N/A — feature works as designed. No new bugs found."
+}

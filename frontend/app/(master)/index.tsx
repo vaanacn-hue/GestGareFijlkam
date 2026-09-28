@@ -30,6 +30,7 @@ type Comp = {
   available_count: number;
   confirmed_count: number;
   pending_count: number;
+  unavailable_count: number;
   request_sent: boolean;
 };
 
@@ -187,6 +188,12 @@ export default function Dashboard() {
                     <View style={styles.miniPill}>
                       <Text style={styles.miniPillNum}>{c.pending_count}</Text>
                       <Text style={styles.miniPillLabel}>in attesa</Text>
+                    </View>
+                    <View style={styles.miniPill}>
+                      <Text style={[styles.miniPillNum, { color: colors.error }]}>
+                        {c.unavailable_count}
+                      </Text>
+                      <Text style={styles.miniPillLabel}>non disp.</Text>
                     </View>
                   </View>
                 </Card>

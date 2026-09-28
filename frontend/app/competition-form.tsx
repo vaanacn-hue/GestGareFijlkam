@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Ionicons from "@react-native-vector-icons/ionicons";
 
 import { makeStyles, useTheme } from "@/src/theme";
-import { spacing, fontSize } from "@/src/tokens";
+import { spacing, fontSize, radius } from "@/src/tokens";
 import { api, ApiError } from "@/src/api/client";
 import { AppButton, TextField } from "@/src/components/ui";
 import { DatePickerField } from "@/src/components/DatePickerField";
@@ -20,6 +20,7 @@ type Comp = {
   end_date: string;
   address: string;
   notes: string;
+  required_officials: number;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -39,6 +40,7 @@ export default function CompetitionForm() {
   const [end, setEnd] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
+  const [required, setRequired] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -54,6 +56,7 @@ export default function CompetitionForm() {
     setEnd(existing.end_date);
     setAddress(existing.address);
     setNotes(existing.notes ?? "");
+    setRequired(existing.required_officials ?? 0);
     setHydrated(true);
   }
 
@@ -65,6 +68,7 @@ export default function CompetitionForm() {
         end_date: end || start,
         address: address.trim(),
         notes: notes.trim(),
+        required_officials: required,
       };
       return isEdit ? api.patch(`/competitions/${id}`, body) : api.post("/competitions", body);
     },
@@ -142,13 +146,37 @@ export default function CompetitionForm() {
           style={styles.notes}
         />
 
+        <Text style={styles.stepLabel}>Numero ufficiali richiesti</Text>
+        <View style={styles.stepper}>
+          <Pressable
+            testID="required-minus"
+            onPress={() => setRequired((v) => Math.max(0, v - 1))}
+            style={styles.stepBtn}
+          >
+            <Ionicons name="remove" size={24} color={colors.brandPrimary} />
+          </Pressable>
+          <View style={styles.stepValueBox}>
+            <Text style={styles.stepValue} testID="required-value">
+              {required}
+            </Text>
+            <Text style={styles.stepHint}>{required === 0 ? "non specificato" : "ufficiali"}</Text>
+          </View>
+          <Pressable
+            testID="required-plus"
+            onPress={() => setRequired((v) => Math.min(999, v + 1))}
+            style={styles.stepBtn}
+          >
+            <Ionicons name="add" size={24} color={colors.brandPrimary} />
+          </Pressable>
+        </View>
+
         <AppButton
           testID="save-competition"
           title={isEdit ? "Salva modifiche" : "Crea gara"}
           onPress={onSubmit}
           loading={save.isPending}
           icon="checkmark"
-          style={{ marginTop: spacing.md }}
+          style={{ marginTop: spacing.lg }}
         />
       </KeyboardAwareScrollView>
     </View>
@@ -168,4 +196,29 @@ const useStyles = makeStyles((colors) => ({
   },
   title: { fontSize: fontSize.xl, fontWeight: "800", color: colors.onSurface },
   notes: { height: 100, paddingTop: spacing.md, textAlignVertical: "top" },
+  stepLabel: {
+    fontSize: fontSize.base,
+    fontWeight: "600",
+    color: colors.onSurfaceSecondary,
+    marginBottom: spacing.xs,
+  },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surfaceTertiary,
+    borderRadius: radius.md,
+    padding: spacing.xs,
+  },
+  stepBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepValueBox: { alignItems: "center" },
+  stepValue: { fontSize: 28, fontWeight: "900", color: colors.brandPrimary },
+  stepHint: { fontSize: fontSize.sm, color: colors.muted, fontWeight: "600" },
 }));

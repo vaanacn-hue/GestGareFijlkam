@@ -139,6 +139,7 @@ class CompetitionCreate(BaseModel):
     end_date: str
     address: str = Field(min_length=1, max_length=240)
     notes: Optional[str] = ""
+    required_officials: int = Field(ge=0, le=999, default=0)
 
 
 class CompetitionUpdate(BaseModel):
@@ -147,6 +148,7 @@ class CompetitionUpdate(BaseModel):
     end_date: Optional[str] = None
     address: Optional[str] = None
     notes: Optional[str] = None
+    required_officials: Optional[int] = None
 
 
 class RespondIn(BaseModel):
@@ -404,6 +406,7 @@ async def competition_summary(comp: dict) -> dict:
     available = sum(1 for a in avails if a["status"] == "available")
     confirmed = sum(1 for a in avails if a.get("confirmed"))
     pending = sum(1 for a in avails if a["status"] == "pending")
+    unavailable = sum(1 for a in avails if a["status"] == "unavailable")
     present = sum(1 for a in avails if a.get("attended") is True)
     return {
         "id": comp["id"],
@@ -412,12 +415,14 @@ async def competition_summary(comp: dict) -> dict:
         "end_date": comp["end_date"],
         "address": comp["address"],
         "notes": comp.get("notes", ""),
+        "required_officials": comp.get("required_officials", 0),
         "request_sent": comp.get("request_sent", False),
         "created_at": comp.get("created_at"),
         "total_requests": len(avails),
         "available_count": available,
         "confirmed_count": confirmed,
         "pending_count": pending,
+        "unavailable_count": unavailable,
         "present_count": present,
     }
 
@@ -439,6 +444,7 @@ async def create_competition(body: CompetitionCreate, _: Annotated[dict, Depends
         "end_date": body.end_date,
         "address": body.address.strip(),
         "notes": (body.notes or "").strip(),
+        "required_officials": body.required_officials,
         "request_sent": False,
         "deleted_at": None,
         "created_at": now_iso(),
@@ -500,22 +506,27 @@ async def competition_availabilities(comp_id: str, _: Annotated[dict, Depends(ma
     if not comp:
         raise HTTPException(404, "Gara non trovata")
     avails = await db.availabilities.find({"competition_id": comp_id}).to_list(1000)
+    avail_by_off = {a["official_id"]: a for a in avails}
+    # Include ALL active officials so the master can convoke anyone directly,
+    # even those who have not (yet) declared their availability.
+    officials = await db.users.find(
+        {"role": "official", "active": True, "deleted_at": None}
+    ).to_list(1000)
     result = []
-    for a in avails:
-        off = await db.users.find_one({"id": a["official_id"]})
-        if not off:
-            continue
+    for off in officials:
+        a = avail_by_off.get(off["id"])
         result.append({
-            "id": a["id"],
-            "official_id": a["official_id"],
+            "id": a["id"] if a else off["id"],
+            "official_id": off["id"],
             "official_name": f"{off['first_name']} {off['surname']}",
             "username": off["username"],
-            "status": a["status"],
-            "confirmed": a.get("confirmed", False),
-            "attended": a.get("attended"),
-            "responded_at": a.get("responded_at"),
+            "status": a["status"] if a else "not_requested",
+            "confirmed": a.get("confirmed", False) if a else False,
+            "attended": a.get("attended") if a else None,
+            "responded_at": a.get("responded_at") if a else None,
         })
-    result.sort(key=lambda r: (r["status"] != "available", r["official_name"]))
+    order = {"available": 0, "convoked": 1, "pending": 2, "not_requested": 3, "unavailable": 4}
+    result.sort(key=lambda r: (order.get(r["status"], 9), r["official_name"]))
     return result
 
 
@@ -526,27 +537,58 @@ async def confirm_officials(comp_id: str, body: ConfirmIn,
     if not comp:
         raise HTTPException(404, "Gara non trovata")
     avails = await db.availabilities.find({"competition_id": comp_id}).to_list(1000)
+    avail_by_off = {a["official_id"]: a for a in avails}
     selected = set(body.official_ids)
+
+    async def notify_confirm(official_id: str, direct: bool):
+        title = "Sei stato convocato!" if direct else "Presenza confermata!"
+        await push_notification(
+            official_id, "confirmation", title,
+            f"Sei convocato per «{comp['name']}» il {comp['start_date']}. "
+            f"Presentati all'indirizzo: {comp['address']}.",
+            comp["id"],
+        )
+
+    # Confirm / convoke selected officials (create a record if none exists).
+    for off_id in selected:
+        a = avail_by_off.get(off_id)
+        if a:
+            if not a.get("confirmed"):
+                await db.availabilities.update_one(
+                    {"id": a["id"]},
+                    {"$set": {"confirmed": True, "confirmed_at": now_iso()}},
+                )
+                await notify_confirm(off_id, a["status"] not in ("available",))
+        else:
+            off = await db.users.find_one(
+                {"id": off_id, "role": "official", "active": True, "deleted_at": None}
+            )
+            if not off:
+                continue
+            await db.availabilities.insert_one({
+                "id": new_id(),
+                "competition_id": comp_id,
+                "official_id": off_id,
+                "status": "convoked",
+                "confirmed": True,
+                "attended": None,
+                "responded_at": None,
+                "confirmed_at": now_iso(),
+                "created_at": now_iso(),
+            })
+            await notify_confirm(off_id, True)
+
+    # Un-confirm officials that were removed from the selection.
     for a in avails:
-        should = a["official_id"] in selected
-        was = a.get("confirmed", False)
-        if should and not was:
-            await db.availabilities.update_one(
-                {"id": a["id"]},
-                {"$set": {"confirmed": True, "confirmed_at": now_iso()}},
-            )
-            await push_notification(
-                a["official_id"], "confirmation",
-                "Presenza confermata!",
-                f"Sei confermato per «{comp['name']}» il {comp['start_date']}. "
-                f"Presentati all'indirizzo: {comp['address']}.",
-                comp["id"],
-            )
-        elif not should and was:
-            await db.availabilities.update_one(
-                {"id": a["id"]},
-                {"$set": {"confirmed": False, "confirmed_at": None}},
-            )
+        if a["official_id"] not in selected and a.get("confirmed"):
+            if a.get("status") == "convoked":
+                # purely-convoked (no real response) -> drop the record entirely
+                await db.availabilities.delete_one({"id": a["id"]})
+            else:
+                await db.availabilities.update_one(
+                    {"id": a["id"]},
+                    {"$set": {"confirmed": False, "confirmed_at": None}},
+                )
     comp = await db.competitions.find_one({"id": comp_id})
     return await competition_summary(comp)
 
